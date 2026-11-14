@@ -86,4 +86,4 @@ jobs:
           scp -i ~/.ssh/deploy_key dujiao-next-linux-arm64 \
             "$DEPLOY_USER@$DEPLOY_HOST:/tmp/dujiao-next-${APP_VERSION}"
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
-            "set -eu; sudo install -o yystore -g yystore -m 0755 /tmp/dujiao-next-${APP_VERSION} /opt/yystore/dujiao-next.new; sudo mv /opt/yystore/dujiao-next.new /opt/yystore/dujiao-next; sudo rm -f /tmp/dujiao-next-${APP_VERSION}; sudo systemctl restart yystore.service; sudo systemctl is-active --quiet yystore.service; curl --fail --silent --show-error http://127.0.0.1:18088/health >/dev/null"
+            "set -eu; sudo install -o yystore -g yystore -m 0755 /tmp/dujiao-next-${APP_VERSION} /opt/yystore/dujiao-next.new; sudo mv /opt/yystore/dujiao-next.new /opt/yystore/dujiao-next; sudo rm -f /tmp/dujiao-next-${APP_VERSION}; sudo systemctl restart yystore.service; sudo systemctl is-active --quiet yystore.service; for attempt in \$(seq 1 30); do if curl --fail --silent --show-error http://127.0.0.1:18088/health >/dev/null; then exit 0; fi; sleep 2; done; exit 1"
