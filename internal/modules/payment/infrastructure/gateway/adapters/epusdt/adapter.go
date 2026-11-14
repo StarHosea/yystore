@@ -63,6 +63,11 @@ func (a *epusdtAdapter) CreatePayment(ctx context.Context, raw jsonmap.JSON, inp
 	if err != nil {
 		return nil, err
 	}
+	mode, _ := input.Extra["interaction_mode"].(string)
+	inline := strings.EqualFold(strings.TrimSpace(mode), constants.PaymentInteractionQR) && cfg.OrderMode != constants.PaymentEpusdtOrderModeCashier
+	if inline && !strings.EqualFold(cfg.Currency, strings.TrimSpace(input.Currency)) {
+		return nil, fmt.Errorf("%w: inline GMPay currency must match order currency", paymentcontract.ErrGatewayConfigInvalid)
+	}
 
 	returnURL := strings.TrimSpace(input.ReturnURL)
 	if returnURL == "" {
@@ -76,16 +81,31 @@ func (a *epusdtAdapter) CreatePayment(ctx context.Context, raw jsonmap.JSON, inp
 		Name:      input.Subject,
 		NotifyURL: input.NotifyURL,
 		ReturnURL: returnURL,
+		Inline:    inline,
 	}
 	result, err := epusdt.CreatePayment(ctx, cfg, native)
 	if err != nil {
 		return nil, mapEpusdtError(err)
 	}
+	payURL, qrCode := result.PaymentURL, result.PaymentURL
+	if inline {
+		data, ok := result.Raw["data"].(map[string]interface{})
+		address, _ := data["receive_address"].(string)
+		amount, _ := data["actual_amount"].(string)
+		token, _ := data["token"].(string)
+		network, _ := data["network"].(string)
+		chainAmount, amountErr := decimal.NewFromString(amount)
+		if !ok || result.Raw["status_code"] != float64(200) || strings.TrimSpace(address) == "" || amountErr != nil || !chainAmount.IsPositive() || !strings.EqualFold(token, cfg.Token) || !strings.EqualFold(network, cfg.Network) {
+			return nil, paymentcontract.ErrGatewayResponseInvalid
+		}
+		// QR encodes the wallet address, never the hosted cashier URL.
+		payURL, qrCode = "", strings.TrimSpace(address)
+	}
 
 	return &paymentcontract.GatewayCreateResult{
 		ProviderRef:        result.TradeID,
-		RedirectURL:        result.PaymentURL,
-		QRCodeURL:          result.PaymentURL, // epusdt 是 USDT 网关，PaymentURL 同时用于跳转和 QR 展示
+		RedirectURL:        payURL,
+		QRCodeURL:          qrCode,
 		Payload:            jsonmap.JSON(result.Raw),
 		DisplayChannelType: epusdtDisplayChannelType(cfg),
 	}, nil

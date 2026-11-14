@@ -120,6 +120,17 @@ func TestExtractCryptoWalletInfo_DujiaoPayQR(t *testing.T) {
 	}
 }
 
+func TestExtractCryptoWalletInfo_EpusdtQRIncludesNetworkAndToken(t *testing.T) {
+	info := ExtractCryptoWalletInfo(constants.PaymentProviderEpusdt, constants.PaymentInteractionQR, jsonmap.JSON{
+		"data": map[string]any{
+			"receive_address": "TWallet", "actual_amount": "1.000123", "network": "tron", "token": "USDT",
+		},
+	})
+	if info.Address != "TWallet" || info.ChainAmount != "1.000123" || info.Chain != "tron" || info.TokenID != "USDT" {
+		t.Fatalf("unexpected wallet details: %+v", info)
+	}
+}
+
 func TestExtractCryptoWalletInfo_BepusdtQRIncludesChainLabels(t *testing.T) {
 	info := ExtractCryptoWalletInfo(constants.PaymentProviderBepusdt, constants.PaymentInteractionQR, jsonmap.JSON{
 		"data": map[string]any{

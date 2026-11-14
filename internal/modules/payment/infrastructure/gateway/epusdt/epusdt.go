@@ -193,6 +193,7 @@ type CreateInput struct {
 	Name      string
 	NotifyURL string
 	ReturnURL string
+	Inline    bool // 展示链上付款信息时无需外部收银台回跳地址
 }
 
 // CreateResult 创建订单结果
@@ -264,12 +265,14 @@ func CreatePayment(ctx context.Context, cfg *Config, input CreateInput) (*Create
 	}
 
 	params := map[string]interface{}{
-		"pid":          cfg.PID,
-		"order_id":     input.OrderNo,
-		"currency":     cfg.Currency,
-		"amount":       amount,
-		"notify_url":   notifyURL,
-		"redirect_url": returnURL,
+		"pid":        cfg.PID,
+		"order_id":   input.OrderNo,
+		"currency":   cfg.Currency,
+		"amount":     amount,
+		"notify_url": notifyURL,
+	}
+	if !input.Inline {
+		params["redirect_url"] = returnURL
 	}
 	if cfg.OrderMode != constants.PaymentEpusdtOrderModeCashier {
 		params["token"] = cfg.Token

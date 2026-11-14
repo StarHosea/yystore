@@ -2,7 +2,10 @@ package epusdtadapter
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	paymentcontract "github.com/dujiao-next/internal/modules/payment/contract"
@@ -10,6 +13,8 @@ import (
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/epusdt"
 	"github.com/dujiao-next/internal/shared/jsonmap"
+	"github.com/dujiao-next/internal/shared/money"
+	"github.com/shopspring/decimal"
 )
 
 func TestEpusdtAdapter_Type(t *testing.T) {
@@ -42,6 +47,69 @@ func TestEpusdtAdapter_CreatePayment_ConfigInvalidMapped(t *testing.T) {
 	}
 	if !errors.Is(err, paymentcontract.ErrGatewayConfigInvalid) {
 		t.Fatalf("expected wrapped paymentcontract.ErrGatewayConfigInvalid, got %v", err)
+	}
+}
+
+func TestEpusdtAdapter_InlinePayment(t *testing.T) {
+	tests := []struct {
+		name, mode, orderMode, address, amount, token, network string
+		invalid, inline                                        bool
+	}{
+		{name: "wallet QR", mode: "qr", address: "TWallet", amount: "1.000123", token: "USDT", network: "tron", inline: true},
+		{name: "missing address", mode: "qr", amount: "1", token: "USDT", network: "tron", invalid: true},
+		{name: "invalid amount", mode: "qr", address: "TWallet", amount: "NaN", token: "USDT", network: "tron", invalid: true},
+		{name: "zero amount", mode: "qr", address: "TWallet", amount: "0", token: "USDT", network: "tron", invalid: true},
+		{name: "wrong asset", mode: "qr", address: "TWallet", amount: "1", token: "USDC", network: "tron", invalid: true},
+		{name: "wrong network", mode: "qr", address: "TWallet", amount: "1", token: "USDT", network: "bsc", invalid: true},
+		{name: "hosted redirect", mode: "redirect"},
+		{name: "cashier QR", mode: "qr", orderMode: "cashier"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var params map[string]interface{}
+				if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+					t.Error(err)
+				}
+				inline := tc.mode == "qr" && tc.orderMode != "cashier"
+				if _, hasReturn := params["redirect_url"]; hasReturn == inline {
+					t.Errorf("redirect_url presence = %v for inline=%v", hasReturn, inline)
+				}
+				if params["notify_url"] != "https://shop.example.com/api/v1/payments/callback" || params["signature"] != epusdt.Sign(params, "test-secret") {
+					t.Error("signed callback configuration not preserved")
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"status_code": 200,
+					"data":        map[string]interface{}{"trade_id": "TRADE-1", "receive_address": tc.address, "actual_amount": tc.amount, "token": tc.token, "network": tc.network},
+				})
+			}))
+			defer srv.Close()
+			result, err := NewEpusdtAdapter().CreatePayment(context.Background(), jsonmap.JSON{
+				"gateway_url": srv.URL, "pid": "1001", "secret_key": "test-secret", "order_mode": tc.orderMode,
+				"token": "usdt", "network": "tron", "currency": "cny",
+				"notify_url": "https://shop.example.com/api/v1/payments/callback", "return_url": "https://shop.example.com/pay",
+			}, paymentcontract.GatewayCreateInput{
+				OrderNo: "DJP-1", Currency: "CNY", Amount: money.FromDecimal(decimal.RequireFromString("6.78")),
+				Extra: jsonmap.JSON{"interaction_mode": tc.mode}, ReturnURLQuery: map[string]string{"guest": "1", "order_no": "ORDER-1"},
+			})
+			if tc.invalid {
+				if !errors.Is(err, paymentcontract.ErrGatewayResponseInvalid) {
+					t.Fatalf("error = %v, want invalid gateway response", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.inline {
+				if result.RedirectURL != "" || result.QRCodeURL != tc.address || result.ProviderRef != "TRADE-1" {
+					t.Fatalf("expected wallet QR without external link: %+v", result)
+				}
+			} else if result.RedirectURL == "" || result.QRCodeURL != result.RedirectURL {
+				t.Fatalf("hosted cashier result lost: %+v", result)
+			}
+		})
 	}
 }
 

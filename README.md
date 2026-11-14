@@ -221,6 +221,12 @@ cp config.yml.example config.yml
 
 Full instructions: https://dujiao-next.com/deploy/
 
+For GMPay payments on the store's own payment page, configure an `epusdt` channel
+with `interaction_mode: qr` and `order_mode: transaction`, selecting a token and
+network per channel. The store displays the returned wallet address, exact crypto
+amount, token and network without linking to the hosted cashier. Signed callbacks
+still confirm payment. Cashier and redirect modes use the external payment page.
+
 Or with Docker:
 
 ```bash
