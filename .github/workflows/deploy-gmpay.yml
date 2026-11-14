@@ -1,0 +1,46 @@
+name: deploy-gmpay
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - deploy/gmpay/**
+      - .github/workflows/deploy-gmpay.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gmpay-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deployment configuration
+        run: docker compose -f deploy/gmpay/compose.yml config --quiet
+      - name: Install SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          set -eu
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+      - name: Deploy fixed gateway image
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_REVISION: ${{ github.sha }}
+        run: |
+          set -eu
+          scp -i ~/.ssh/deploy_key deploy/gmpay/compose.yml deploy/gmpay/deploy.sh \
+            "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+            "sudo bash /tmp/deploy.sh '$DEPLOY_REVISION'"

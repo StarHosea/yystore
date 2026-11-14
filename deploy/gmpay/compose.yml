@@ -1,0 +1,25 @@
+services:
+  gmpay-edge:
+    image: ghcr.io/gmwalletapp/gmpay-edge:1.2.0@sha256:dd119a7812491feb920c5ebb7428cc40120490e878a915af9d59342fa24f25a1
+    container_name: gmpay-edge
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18089:3000"
+    environment:
+      GMPAY_DATA_DIR: /var/lib/gmpay
+    volumes:
+      - /opt/gmpay/data:/var/lib/gmpay
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

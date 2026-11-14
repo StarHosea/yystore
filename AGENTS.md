@@ -88,3 +88,4 @@
 
 - 生产环境由 `.github/workflows/deploy.yml` 在 `main` 分支的 CI 成功后自动发布；后续程序更新必须通过提交代码触发 GitHub Actions 部署。
 - 除首次初始化、故障处置和数据恢复外，不要在生产服务器上手工替换二进制或绕过 CI 发布。运行时配置和密钥保留在服务器受限文件中，不提交到仓库。
+- 支付网关采用 `deploy/gmpay/compose.yml` 中固定 digest 的官方 Bun 镜像，更新该文件后由 `deploy-gmpay.yml` 发布；持久数据在服务器 `/opt/gmpay/data`，发布前使用官方 CLI 备份，禁止将数据或密钥提交到仓库。
