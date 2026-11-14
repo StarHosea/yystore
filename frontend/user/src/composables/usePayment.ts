@@ -197,9 +197,11 @@ export function usePayment() {
     return mode
   })
 
-  const paymentResultTitle = computed(() => t(resolvePaymentResultTitleKey(interactionMode.value)))
-  const paymentGuideTitle = computed(() => paymentPresentationMode.value === 'redirect' ? t('payment.redirectTitle') : t('payment.qrTitle'))
-  const paymentGuideTip = computed(() => paymentPresentationMode.value === 'redirect' ? t('payment.redirectTip') : t('payment.qrTip'))
+  const isBinanceUIDPayment = computed(() => paymentProviderType.value === 'epusdt' && cryptoChain.value.toLowerCase() === 'binance')
+  const paymentResultTitle = computed(() => t(isBinanceUIDPayment.value ? 'payment.binanceTitle' : resolvePaymentResultTitleKey(interactionMode.value)))
+  const paymentGuideTitle = computed(() => isBinanceUIDPayment.value ? t('payment.binanceTitle') : paymentPresentationMode.value === 'redirect' ? t('payment.redirectTitle') : t('payment.qrTitle'))
+  const paymentGuideTip = computed(() => isBinanceUIDPayment.value ? t('payment.binanceTip') : paymentPresentationMode.value === 'redirect' ? t('payment.redirectTip') : t('payment.qrTip'))
+  const copyWalletAddressLabel = computed(() => t(isBinanceUIDPayment.value ? 'payment.copyBinanceUID' : 'payment.copyWalletAddress'))
 
   const showPayLink = computed(() => {
     return paymentPresentationMode.value === 'redirect' || Boolean(payLink.value)
@@ -236,6 +238,7 @@ export function usePayment() {
       eth: 'Ethereum',
       bsc: 'BNB Smart Chain',
       polygon: 'Polygon',
+      binance: 'Binance',
     }
     return labels[normalized] || value
   }
@@ -252,21 +255,21 @@ export function usePayment() {
     if (cryptoChain.value) {
       details.push({
         key: 'chain',
-        label: t('payment.cryptoChain'),
+        label: t(isBinanceUIDPayment.value ? 'payment.paymentPlatform' : 'payment.cryptoChain'),
         value: formatCryptoChain(cryptoChain.value),
       })
     }
     if (cryptoChainAmount.value) {
       details.push({
         key: 'amount',
-        label: t('payment.cryptoAmount'),
+        label: t(isBinanceUIDPayment.value ? 'payment.transferAmount' : 'payment.cryptoAmount'),
         value: cryptoChainAmount.value,
       })
     }
     if (cryptoWalletAddress.value) {
       details.push({
         key: 'wallet_address',
-        label: t('payment.walletAddress'),
+        label: t(isBinanceUIDPayment.value ? 'payment.binanceUID' : 'payment.walletAddress'),
         value: cryptoWalletAddress.value,
       })
     }
@@ -278,7 +281,7 @@ export function usePayment() {
     if (qrCodeContent.value) return ''
     return payLink.value
   })
-  const qrDisplayContent = computed(() => qrCodeContent.value || qrFallbackContent.value)
+  const qrDisplayContent = computed(() => isBinanceUIDPayment.value ? '' : qrCodeContent.value || qrFallbackContent.value)
   const qrUsingPayLinkFallback = computed(() => Boolean(!qrCodeContent.value && qrFallbackContent.value))
   const showQRCode = computed(() => paymentPresentationMode.value === 'qr' && Boolean(qrDisplayContent.value))
 
@@ -1387,6 +1390,8 @@ export function usePayment() {
     showTelegramPayHint,
     payLinkOpenedTip,
     // crypto / qr
+    isBinanceUIDPayment,
+    copyWalletAddressLabel,
     cryptoWalletAddress,
     cryptoPaymentDetails,
     hasCryptoPaymentDetails,

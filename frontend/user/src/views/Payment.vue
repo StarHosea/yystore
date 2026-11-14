@@ -87,10 +87,10 @@
 
           <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-2 space-y-4">
-              <div v-if="showQRCode"
+              <div v-if="showQRCode || isBinanceUIDPayment"
                 class="bg-secondary border rounded-2xl p-4 sm:p-6 flex flex-col items-center justify-center text-center">
                 <div class="text-sm text-muted-foreground mb-4">{{ paymentGuideTitle }}</div>
-                <div class="w-full max-w-[280px] sm:max-w-[240px] aspect-square rounded-xl overflow-hidden bg-white p-2">
+                <div v-if="showQRCode" class="w-full max-w-[280px] sm:max-w-[240px] aspect-square rounded-xl overflow-hidden bg-white p-2">
                   <img :src="qrImageUrl" alt="QR Code" class="w-full h-full object-contain" />
                 </div>
                 <div v-if="qrUsingPayLinkFallback" class="mt-3 text-xs text-muted-foreground">
@@ -110,7 +110,7 @@
                   </div>
                   <div v-if="cryptoWalletAddress" class="flex flex-wrap items-center justify-end gap-2 pt-1">
                     <Button variant="secondary" size="sm" @click="handleCopyWalletAddress">
-                      {{ t('payment.copyWalletAddress') }}
+                      {{ copyWalletAddressLabel }}
                     </Button>
                     <span v-if="walletAddressCopied" class="text-xs text-success">{{ t('payment.copied') }}</span>
                   </div>
@@ -382,8 +382,8 @@
                 }}</div>
             </div>
 
-            <div v-if="showQRCode" class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-              <div
+            <div v-if="showQRCode || isBinanceUIDPayment" class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              <div v-if="showQRCode"
                 class="bg-secondary border rounded-xl p-4 flex items-center justify-center">
                 <img :src="qrImageUrl" alt="QR Code" class="w-48 h-48 object-contain" />
               </div>
@@ -407,7 +407,7 @@
                   </div>
                   <div v-if="cryptoWalletAddress" class="flex flex-wrap items-center gap-2 pt-1">
                     <Button variant="secondary" size="sm" class="font-bold" @click="handleCopyWalletAddress">
-                      {{ t('payment.copyWalletAddress') }}
+                      {{ copyWalletAddressLabel }}
                     </Button>
                     <span v-if="walletAddressCopied" class="text-xs text-success">{{ t('payment.copied') }}</span>
                   </div>
@@ -510,7 +510,7 @@ const {
   backLink, showGuestAuthForm, walletOnlyPayment, showBalanceOption, configReady, channels,
   selectedChannel, selectedChannelName, cachedChannelName, resultChannelName, interactionLabel,
   paymentResultTitle, paymentGuideTitle, paymentGuideTip, showPayLink, showTelegramPayHint, payLinkOpenedTip,
-  cryptoWalletAddress, cryptoPaymentDetails, hasCryptoPaymentDetails, qrUsingPayLinkFallback, showQRCode, qrImageUrl,
+  isBinanceUIDPayment, copyWalletAddressLabel, cryptoWalletAddress, cryptoPaymentDetails, hasCryptoPaymentDetails, qrUsingPayLinkFallback, showQRCode, qrImageUrl,
   orderExpired, orderCanceled, paymentAlert, countdownExpired, countdownText, showCountdown, showResultView, pollingActive, orderItems,
   customerFeeApplied, customerFeeAmountDisplay, payableAmountDisplay, walletBalanceDisplay,
   expectedWalletPaidDisplay, expectedOnlinePayDisplay, expectedOnlinePayCents, requiresOnlineChannel,

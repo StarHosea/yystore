@@ -52,9 +52,9 @@
       <div class="mt-5 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div>
           <!-- QR -->
-          <div v-if="showQRCode" class="flex flex-col items-center rounded-xl border bg-secondary p-[22px] text-center">
+          <div v-if="showQRCode || isBinanceUIDPayment" class="flex flex-col items-center rounded-xl border bg-secondary p-[22px] text-center">
             <div class="mb-3 text-[13px] text-muted-foreground">{{ paymentGuideTitle }}</div>
-            <div class="aspect-square w-full max-w-[240px] overflow-hidden rounded-md bg-white p-2"><img :src="qrImageUrl" alt="QR Code" class="h-full w-full object-contain" /></div>
+            <div v-if="showQRCode" class="aspect-square w-full max-w-[240px] overflow-hidden rounded-md bg-white p-2"><img :src="qrImageUrl" alt="QR Code" class="h-full w-full object-contain" /></div>
             <div v-if="qrUsingPayLinkFallback" class="mt-2.5 text-xs text-muted-foreground">{{ t('payment.qrFallbackHint') }}</div>
             <div v-if="hasCryptoPaymentDetails" class="mt-4 grid w-full gap-2 rounded-md border p-3 text-left">
               <div v-for="item in cryptoPaymentDetails" :key="item.key" class="flex justify-between gap-3 border-b pb-1.5 last:border-b-0 last:pb-0">
@@ -62,7 +62,7 @@
                 <span class="break-all text-right text-[13px] font-semibold text-foreground">{{ item.value }}<span v-if="item.detail" class="text-muted-foreground"> ({{ item.detail }})</span></span>
               </div>
               <div v-if="cryptoWalletAddress" class="flex items-center justify-end gap-2 pt-1.5">
-                <Button variant="outline" size="sm" class="rounded-full" @click="handleCopyWalletAddress">{{ t('payment.copyWalletAddress') }}</Button>
+                <Button variant="outline" size="sm" class="rounded-full" @click="handleCopyWalletAddress">{{ copyWalletAddressLabel }}</Button>
                 <span v-if="walletAddressCopied" class="text-xs text-[color:var(--teal-strong)]">{{ t('payment.copied') }}</span>
               </div>
             </div>
@@ -267,7 +267,7 @@ const {
   backLink, showGuestAuthForm, walletOnlyPayment, showBalanceOption, configReady, channels,
   selectedChannel, selectedChannelName, cachedChannelName, resultChannelName, interactionLabel,
   paymentResultTitle, paymentGuideTitle, paymentGuideTip, showPayLink, showTelegramPayHint, payLinkOpenedTip,
-  cryptoWalletAddress, cryptoPaymentDetails, hasCryptoPaymentDetails, qrUsingPayLinkFallback, showQRCode, qrImageUrl,
+  isBinanceUIDPayment, copyWalletAddressLabel, cryptoWalletAddress, cryptoPaymentDetails, hasCryptoPaymentDetails, qrUsingPayLinkFallback, showQRCode, qrImageUrl,
   orderExpired, orderCanceled, paymentAlert, countdownExpired, countdownText, showCountdown, showResultView, pollingActive, orderItems,
   customerFeeApplied, customerFeeAmountDisplay, payableAmountDisplay, walletBalanceDisplay,
   expectedWalletPaidDisplay, expectedOnlinePayDisplay, expectedOnlinePayCents, requiresOnlineChannel,
