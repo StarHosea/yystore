@@ -83,3 +83,8 @@
 - commit message 只写一行 subject，祈使语气，带前缀：`feat:` / `fix:` / `refactor:` / `chore:` / `docs:` / `test:`，中英文均可。例：`fix: 修复商品无法关闭 SKU 规格配置`。
 - **不要**在 commit message 中添加 `Co-Authored-By: <AI>`、`Generated with ...` 等任何 AI 署名行。
 - 一个 commit / PR 只做一件事；PR 描述写清改动范围、验证结果和已知风险，涉及界面改动附截图。
+
+## 生产部署
+
+- 生产环境由 `.github/workflows/deploy.yml` 在 `main` 分支的 CI 成功后自动发布；后续程序更新必须通过提交代码触发 GitHub Actions 部署。
+- 除首次初始化、故障处置和数据恢复外，不要在生产服务器上手工替换二进制或绕过 CI 发布。运行时配置和密钥保留在服务器受限文件中，不提交到仓库。

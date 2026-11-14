@@ -1,0 +1,89 @@
+name: deploy
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy production
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      APP_VERSION: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Checkout tested revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.11.1'
+          cache: pnpm
+          cache-dependency-path: |
+            frontend/admin/pnpm-lock.yaml
+            frontend/user/pnpm-lock.yaml
+
+      - name: Build frontend assets
+        run: |
+          set -eu
+          (cd frontend/admin && pnpm install --frozen-lockfile && pnpm run build:fullstack)
+          (cd frontend/user && pnpm install --frozen-lockfile && pnpm run build)
+          rm -rf internal/web/dist
+          mkdir -p internal/web/dist
+          cp -r frontend/admin/dist internal/web/dist/admin
+          cp -r frontend/user/dist internal/web/dist/user
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build arm64 release binary
+        run: |
+          set -eu
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+            go build -trimpath -tags release,fullstack \
+            -ldflags="-s -w -X github.com/dujiao-next/internal/version.Version=${APP_VERSION} -X github.com/dujiao-next/internal/version.BuildType=release" \
+            -o dujiao-next-linux-arm64 ./cmd/server
+
+      - name: Install SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          set -eu
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload and restart service
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -eu
+          scp -i ~/.ssh/deploy_key dujiao-next-linux-arm64 \
+            "$DEPLOY_USER@$DEPLOY_HOST:/tmp/dujiao-next-${APP_VERSION}"
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+            "set -eu; sudo install -o yystore -g yystore -m 0755 /tmp/dujiao-next-${APP_VERSION} /opt/yystore/dujiao-next.new; sudo mv /opt/yystore/dujiao-next.new /opt/yystore/dujiao-next; sudo rm -f /tmp/dujiao-next-${APP_VERSION}; sudo systemctl restart yystore.service; sudo systemctl is-active --quiet yystore.service; curl --fail --silent --show-error http://127.0.0.1:18088/health >/dev/null"
