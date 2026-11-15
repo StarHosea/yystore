@@ -10,6 +10,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -172,7 +175,7 @@ func TestCreatePayment_BuildsRequestAndConstructsPaymentURL(t *testing.T) {
 		Network:    "tron",
 		Currency:   "cny",
 		NotifyURL:  "https://example.com/notify",
-		ReturnURL:  "https://example.com/return",
+		ReturnURL:  "https://example.com/pay?biz_type=order&epusdt_return=1&guest=1&order_no=ORD-1",
 	}
 	cfg.Normalize()
 
@@ -200,6 +203,22 @@ func TestCreatePayment_BuildsRequestAndConstructsPaymentURL(t *testing.T) {
 	if capturedBody["currency"] != "cny" {
 		t.Fatalf("currency mismatch: %v", capturedBody["currency"])
 	}
+	redirectURL, ok := capturedBody["redirect_url"].(string)
+	if !ok || regexp.MustCompile(`&[A-Za-z_][A-Za-z0-9_]*=`).MatchString(redirectURL) {
+		t.Fatalf("redirect_url must not contain ambiguous signature parameters: %v", capturedBody["redirect_url"])
+	}
+	redirect, err := url.Parse(redirectURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, _ := url.Parse(cfg.ReturnURL)
+	if !reflect.DeepEqual(redirect.Query(), original.Query()) {
+		t.Fatalf("redirect query changed: got %v, want %v", redirect.Query(), original.Query())
+	}
+	expectedSignature := hmacSHA256LowerHex("amount=100&currency=cny&name=VIP Plan&network=tron&notify_url=https://example.com/notify&order_id=ORD-1&pid=1000&redirect_url="+redirectURL+"&token=usdt", cfg.SecretKey)
+	if capturedBody["signature"] != expectedSignature {
+		t.Fatal("signature must cover the exact encoded redirect_url sent to GMPay")
+	}
 	if capturedBody["token"] != "usdt" {
 		t.Fatalf("token mismatch: %v", capturedBody["token"])
 	}
@@ -218,11 +237,46 @@ func TestCreatePayment_BuildsRequestAndConstructsPaymentURL(t *testing.T) {
 	if capturedBody["notify_url"] != "https://example.com/notify" {
 		t.Fatalf("notify_url mismatch: %v", capturedBody["notify_url"])
 	}
-	if capturedBody["redirect_url"] != "https://example.com/return" {
+	if redirect.Scheme != original.Scheme || redirect.Host != original.Host || redirect.Path != original.Path {
 		t.Fatalf("redirect_url mismatch: %v", capturedBody["redirect_url"])
 	}
 	if capturedBody["name"] != "VIP Plan" {
 		t.Fatalf("name mismatch: %v", capturedBody["name"])
+	}
+}
+
+func TestEncodeRedirectQueryKeysPreservesReturnNavigation(t *testing.T) {
+	for _, rawURL := range []string{
+		"https://shop.example.com/pay",
+		"https://shop.example.com/pay?order_no=ORD-1",
+		"https://shop.example.com/pay?biz_type=order&epusdt_return=1&guest=1&order_no=ORD-1",
+		"https://shop.example.com/pay?order_no=ORD-1&guest=1&guest=true&empty=&_return=1#payment",
+		"https://shop.example.com/pay?order_no=ORD%26test%3D1&%67uest=1&name=%E6%B5%8B%E8%AF%95",
+	} {
+		t.Run(rawURL, func(t *testing.T) {
+			encoded, err := encodeRedirectQueryKeys(rawURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if regexp.MustCompile(`&[A-Za-z_][A-Za-z0-9_]*=`).MatchString(encoded) {
+				t.Fatalf("ambiguous signature value: %s", encoded)
+			}
+			original, _ := url.Parse(rawURL)
+			parsed, err := url.Parse(encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if original.Scheme != parsed.Scheme || original.Host != parsed.Host || original.Path != parsed.Path || original.Fragment != parsed.Fragment || !reflect.DeepEqual(original.Query(), parsed.Query()) {
+				t.Fatalf("return navigation changed: %s", encoded)
+			}
+			again, err := encodeRedirectQueryKeys(encoded)
+			if err != nil || again != encoded {
+				t.Fatalf("encoding must be idempotent: got %q, %v", again, err)
+			}
+		})
+	}
+	if _, err := encodeRedirectQueryKeys("https://shop.example.com/%zz"); err == nil {
+		t.Fatal("expected malformed URL to fail")
 	}
 }
 

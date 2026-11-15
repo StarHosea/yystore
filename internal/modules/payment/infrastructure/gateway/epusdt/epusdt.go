@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -272,7 +273,11 @@ func CreatePayment(ctx context.Context, cfg *Config, input CreateInput) (*Create
 		"notify_url": notifyURL,
 	}
 	if !input.Inline {
-		params["redirect_url"] = returnURL
+		redirectURL, err := encodeRedirectQueryKeys(returnURL)
+		if err != nil {
+			return nil, fmt.Errorf("%w: invalid return_url", ErrConfigInvalid)
+		}
+		params["redirect_url"] = redirectURL
 	}
 	if cfg.OrderMode != constants.PaymentEpusdtOrderModeCashier {
 		params["token"] = cfg.Token
@@ -307,6 +312,29 @@ func CreatePayment(ctx context.Context, cfg *Config, input CreateInput) (*Create
 		PaymentURL: cfg.GatewayURL + checkoutCounterPathPrefix + tradeID,
 		Raw:        raw,
 	}, nil
+}
+
+// GMPay 拒绝签名值中的 &key=，防止它被重新解释为另一个签名字段。
+// 对 URL 查询参数名的首字节做百分号编码，保留浏览器回跳语义，同时消除签名歧义。
+// 编码后的完整 URL 同时用于签名和请求，网关仍验证原有 HMAC 签名。
+func encodeRedirectQueryKeys(rawURL string) (string, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+	parts := strings.Split(parsed.RawQuery, "&")
+	for i := 1; i < len(parts); i++ {
+		part := parts[i]
+		if !strings.Contains(part, "=") || part == "" {
+			continue
+		}
+		first := part[0]
+		if first == '_' || first >= 'a' && first <= 'z' || first >= 'A' && first <= 'Z' {
+			parts[i] = fmt.Sprintf("%%%02X%s", first, part[1:])
+		}
+	}
+	parsed.RawQuery = strings.Join(parts, "&")
+	return parsed.String(), nil
 }
 
 // extractTradeID 宽松解析：顶层 / data.trade_id / data.id 任一命中
