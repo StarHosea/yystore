@@ -58,12 +58,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build arm64 release binary
+      - name: Build arm64 source binary
         run: |
           set -eu
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
             go build -trimpath -tags release,fullstack \
-            -ldflags="-s -w -X github.com/dujiao-next/internal/version.Version=${APP_VERSION} -X github.com/dujiao-next/internal/version.BuildType=release" \
+            -ldflags="-s -w -X github.com/dujiao-next/internal/version.Version=${APP_VERSION} -X github.com/dujiao-next/internal/version.BuildType=source" \
             -o dujiao-next-linux-arm64 ./cmd/server
 
       - name: Install SSH key

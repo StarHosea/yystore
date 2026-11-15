@@ -26,6 +26,7 @@ const { t } = useI18n()
 interface UpdateCheckResult {
   current_version: string
   latest_version: string
+  version_comparable: boolean
   has_update: boolean
   release_url?: string
   release_name?: string
@@ -389,10 +390,13 @@ onBeforeUnmount(stopPolling)
         <template v-else-if="checkResult">
           <div
             class="flex items-start gap-2 rounded-md border px-3 py-2"
-            :class="checkResult.has_update ? 'border-amber-500/40 bg-amber-500/5 text-amber-600 dark:text-amber-400' : 'border-emerald-500/40 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400'"
+            :class="checkResult.version_comparable === false ? 'border-border bg-muted/40 text-muted-foreground' : checkResult.has_update ? 'border-amber-500/40 bg-amber-500/5 text-amber-600 dark:text-amber-400' : 'border-emerald-500/40 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400'"
           >
-            <component :is="checkResult.has_update ? AlertCircle : CheckCircle2" class="mt-0.5 h-4 w-4 shrink-0" />
-            <span v-if="checkResult.has_update">
+            <component :is="checkResult.version_comparable === false ? Info : checkResult.has_update ? AlertCircle : CheckCircle2" class="mt-0.5 h-4 w-4 shrink-0" />
+            <span v-if="checkResult.version_comparable === false">
+              {{ t('admin.updateCheck.notComparable') }}
+            </span>
+            <span v-else-if="checkResult.has_update">
               {{ t('admin.updateCheck.hasUpdate', { version: checkResult.latest_version || t('admin.updateCheck.unknownVersion') }) }}
             </span>
             <span v-else>

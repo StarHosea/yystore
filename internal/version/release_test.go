@@ -1,6 +1,74 @@
 package version
 
-import "testing"
+import (
+	"context"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+)
+
+type releaseRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f releaseRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestCheckLatestRelease(t *testing.T) {
+	originalVersion, originalTransport := Version, http.DefaultTransport
+	t.Cleanup(func() {
+		Version = originalVersion
+		http.DefaultTransport = originalTransport
+	})
+
+	cases := []struct {
+		name, current, latest       string
+		comparable, update, wantErr bool
+	}{
+		{name: "older release", current: "v1.5.1", latest: "v1.5.2", comparable: true, update: true},
+		{name: "same release", current: "v1.5.2", latest: "v1.5.2", comparable: true},
+		{name: "newer release", current: "v1.5.3", latest: "v1.5.2", comparable: true},
+		{name: "prerelease", current: "v1.5.2-rc.1", latest: "v1.5.2", comparable: true, update: true},
+		{name: "deployment commit", current: "91f3a20ec348d27ac509412947bc03fa8bcef520", latest: "v1.5.2"},
+		{name: "development build", current: "dev", latest: "v1.5.2"},
+		{name: "empty current", latest: "v1.5.2"},
+		{name: "malformed release", current: "v1.5.1", latest: "invalid", wantErr: true},
+		{name: "malformed release with commit", current: "91f3a20", latest: "invalid", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			Version = tc.current
+			http.DefaultTransport = releaseRoundTripper(func(req *http.Request) (*http.Response, error) {
+				if req.URL.String() != "https://api.github.com/repos/dujiao-next/dujiao-next/releases/latest" {
+					t.Fatalf("unexpected release URL: %s", req.URL)
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader(`{"tag_name":"` + tc.latest + `","name":"Latest release","html_url":"https://github.com/dujiao-next/dujiao-next/releases/tag/v1.5.2","body":"Release notes","published_at":"2026-11-02T04:45:09Z"}`)),
+				}, nil
+			})
+			result, err := CheckLatestRelease(context.Background())
+			if tc.wantErr {
+				if err == nil || result != nil {
+					t.Fatalf("malformed release must fail: result=%+v, err=%v", result, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.CurrentVersion != tc.current || result.LatestVersion != tc.latest {
+				t.Fatalf("unexpected versions: %+v", result)
+			}
+			if result.VersionComparable != tc.comparable || result.HasUpdate != tc.update {
+				t.Fatalf("unexpected comparison: %+v", result)
+			}
+			if result.ReleaseName != "Latest release" || result.ReleaseNotes != "Release notes" || result.ReleaseURL == "" || result.PublishedAt == nil || result.Source != "https://github.com/dujiao-next/dujiao-next/releases" {
+				t.Fatalf("release information was lost: %+v", result)
+			}
+		})
+	}
+}
 
 func TestIsNewerVersion(t *testing.T) {
 	cases := []struct {

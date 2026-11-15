@@ -59,14 +59,16 @@ type Release struct {
 
 // CheckResult 检测结果，已包含当前与最新版本以及是否需要更新
 type CheckResult struct {
-	CurrentVersion string     `json:"current_version"`
-	LatestVersion  string     `json:"latest_version"`
-	HasUpdate      bool       `json:"has_update"`
-	ReleaseURL     string     `json:"release_url,omitempty"`
-	ReleaseName    string     `json:"release_name,omitempty"`
-	ReleaseNotes   string     `json:"release_notes,omitempty"`
-	PublishedAt    *time.Time `json:"published_at,omitempty"`
-	Source         string     `json:"source"`
+	CurrentVersion string `json:"current_version"`
+	LatestVersion  string `json:"latest_version"`
+	// VersionComparable 为 false 时只展示上游发布信息，不判断当前构建是否需要更新。
+	VersionComparable bool       `json:"version_comparable"`
+	HasUpdate         bool       `json:"has_update"`
+	ReleaseURL        string     `json:"release_url,omitempty"`
+	ReleaseName       string     `json:"release_name,omitempty"`
+	ReleaseNotes      string     `json:"release_notes,omitempty"`
+	PublishedAt       *time.Time `json:"published_at,omitempty"`
+	Source            string     `json:"source"`
 }
 
 // ErrRateLimited 触发 GitHub 匿名调用速率限制时返回，便于上层映射成专用提示
@@ -82,19 +84,23 @@ func CheckLatestRelease(ctx context.Context) (*CheckResult, error) {
 
 	current := strings.TrimSpace(Version)
 	latest := strings.TrimSpace(release.TagName)
-	hasUpdate, compareErr := IsNewerVersion(latest, current)
-	if compareErr != nil {
-		return nil, fmt.Errorf("compare latest version %q with current %q: %w", latest, current, compareErr)
+	latestVersion, err := parseSemver(latest)
+	if err != nil {
+		return nil, fmt.Errorf("parse latest version %q: %w", latest, err)
 	}
+	// 源码部署可用提交 SHA 标识当前构建。仍返回发布信息，但不能把无法比较
+	// 当成「已是最新版」或「有更新」；自动升级继续使用 IsNewerVersion 严格校验。
+	currentVersion, currentErr := parseSemver(current)
 
 	result := &CheckResult{
-		CurrentVersion: current,
-		LatestVersion:  latest,
-		HasUpdate:      hasUpdate,
-		ReleaseURL:     release.HTMLURL,
-		ReleaseName:    release.Name,
-		ReleaseNotes:   release.Body,
-		Source:         fmt.Sprintf("https://github.com/%s/%s/releases", repoOwner, repoName),
+		CurrentVersion:    current,
+		LatestVersion:     latest,
+		VersionComparable: currentErr == nil,
+		HasUpdate:         currentErr == nil && compareSemver(latestVersion, currentVersion) > 0,
+		ReleaseURL:        release.HTMLURL,
+		ReleaseName:       release.Name,
+		ReleaseNotes:      release.Body,
+		Source:            fmt.Sprintf("https://github.com/%s/%s/releases", repoOwner, repoName),
 	}
 	if !release.PublishedAt.IsZero() {
 		t := release.PublishedAt
