@@ -26,6 +26,17 @@ func TestJSONDatabaseRoundTrip(t *testing.T) {
 	}
 }
 
+func TestJSONStringScan(t *testing.T) {
+	var decoded JSON
+	if err := decoded.Scan(`{"enabled":true,"name":"storefront"}`); err != nil {
+		t.Fatalf("scan string JSON: %v", err)
+	}
+	want := JSON{"enabled": true, "name": "storefront"}
+	if !reflect.DeepEqual(decoded, want) {
+		t.Fatalf("string JSON scan mismatch\nwant: %#v\ngot:  %#v", want, decoded)
+	}
+}
+
 func TestJSONScanNilCreatesEmptyObject(t *testing.T) {
 	value := JSON{"stale": true}
 	if err := value.Scan(nil); err != nil {
