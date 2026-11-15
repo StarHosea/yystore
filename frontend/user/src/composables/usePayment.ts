@@ -24,6 +24,7 @@ import {
 import QRCode from 'qrcode'
 import { type PageAlert } from '../utils/alerts'
 import { loadGuestOrderAuth, saveGuestOrderAuth } from '../utils/guestOrderAuth'
+import { takeCheckoutPaymentSelection } from '../utils/checkoutPayment'
 
 /**
  * 支付页共享逻辑（classic + vault 双模板共用）。
@@ -42,6 +43,7 @@ export function usePayment() {
   const paymentResult = ref<any>(null)
   const error = ref('')
   const selectedChannelId = ref<number | null>(null)
+  const checkoutChannelId = ref<number | null>(null)
   const copied = ref(false)
   const walletAddressCopied = ref(false)
   const capturing = ref(false)
@@ -802,6 +804,8 @@ export function usePayment() {
       }
       const data = response.data.data
       if (data && (data.pay_url || data.qr_code)) {
+        checkoutChannelId.value = null
+        error.value = ''
         cachedPayment.value = data
         paymentResult.value = data
         selectedChannelId.value = data.channel_id || null
@@ -1127,6 +1131,7 @@ export function usePayment() {
     resetPayment('route_change')
     cachedPayment.value = null
     selectedChannelId.value = null
+    checkoutChannelId.value = null
     order.value = null
     orderPaymentChannels.value = []
     orderPaymentChannelsLoaded.value = false
@@ -1221,12 +1226,23 @@ export function usePayment() {
     return '-'
   }
 
+  const restoreCheckoutSelection = () => {
+    const selection = takeCheckoutPaymentSelection(orderNoQuery.value, isGuest.value)
+    if (!selection) return
+    checkoutChannelId.value = selection.channelId
+    useBalance.value = walletOnlyPayment.value || selection.useBalance
+    if (selection.paymentFailed) {
+      error.value = t('payment.createFailed')
+    }
+  }
+
   onMounted(() => {
     if (isRechargeReturn.value && rechargeNoQuery.value) {
       void redirectToWalletRecharge()
       return
     }
     if (!orderNoQuery.value) return
+    restoreCheckoutSelection()
     guestAuth.value = loadGuestOrderAuth()
     loadOrder()
     void loadWallet()
@@ -1260,10 +1276,11 @@ export function usePayment() {
 
   watch(
     () => [isGuest.value, orderNoQuery.value],
-    async ([, orderNo], [, previousOrderNo]) => {
-      if (!previousOrderNo || orderNo === previousOrderNo) return
+    async ([guest, orderNo], [previousGuest, previousOrderNo]) => {
+      if (!previousOrderNo || (orderNo === previousOrderNo && guest === previousGuest)) return
       resetPaymentRouteState()
       if (!orderNo) return
+      restoreCheckoutSelection()
       await loadOrder()
       void loadWallet()
     }
@@ -1288,8 +1305,18 @@ export function usePayment() {
   )
 
   watch(
-    () => [channels.value, expectedOnlinePayCents.value, requiresOnlineChannel.value],
+    () => [channels.value, expectedOnlinePayCents.value, requiresOnlineChannel.value, loading.value, configReady.value, walletLoading.value, orderPaymentChannelsLoaded.value],
     () => {
+      // 等订单、钱包与渠道加载完成后再校验，避免异步空列表清掉结算页的选择。
+      if (loading.value || !order.value || !configReady.value || walletLoading.value) return
+      if (checkoutChannelId.value !== null) {
+        const channel = findChannelByID(checkoutChannelId.value)
+        if (!channel && !isGuest.value && !orderPaymentChannelsLoaded.value) return
+        if (!paymentResult.value && !selectedChannelId.value && channel && !isChannelDisabledForAmount(channel)) {
+          selectedChannelId.value = checkoutChannelId.value
+        }
+        checkoutChannelId.value = null
+      }
       if (!selectedChannelId.value) return
       const selected = findChannelByID(selectedChannelId.value)
       if (!selected || isChannelDisabledForAmount(selected)) {

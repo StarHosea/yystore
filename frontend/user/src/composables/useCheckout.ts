@@ -14,6 +14,7 @@ import { refreshCartStockSnapshots, cartItemPurchaseLimit as itemPurchaseLimit, 
 import { getImageUrl } from '../utils/image'
 import { getAffiliateCode, getAffiliateVisitorKey } from '../utils/affiliate'
 import { saveGuestOrderAuth } from '../utils/guestOrderAuth'
+import { saveCheckoutPaymentSelection } from '../utils/checkoutPayment'
 import ImageCaptcha from '../components/captcha/ImageCaptcha.vue'
 import TurnstileCaptcha from '../components/captcha/TurnstileCaptcha.vue'
 import { useLocalized, useProductLabels } from './useProduct'
@@ -855,6 +856,13 @@ export function useCheckout() {
         throw new Error(t('checkout.errors.submitFailed'))
       }
 
+      saveCheckoutPaymentSelection({
+        orderNo: responseData.order_no,
+        isGuest: !userAuthStore.isAuthenticated,
+        channelId: payload.channel_id ?? null,
+        useBalance: payload.use_balance,
+        paymentFailed: Boolean(responseData.payment_error),
+      })
       clearSourceStore()
 
       // Redirect to the existing Payment page which handles all payment display
