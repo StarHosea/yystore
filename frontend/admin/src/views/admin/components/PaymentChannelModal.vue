@@ -275,6 +275,12 @@ const interactionModeOptions = computed(() => {
     ]
   }
   if (form.provider_type === 'epusdt') {
+    if (epusdtConfig.order_mode !== 'cashier') {
+      return [
+        { value: 'qr', label: 'admin.paymentChannels.interactionModes.qr' },
+        { value: 'redirect', label: 'admin.paymentChannels.interactionModes.redirect' },
+      ]
+    }
     return [
       { value: 'redirect', label: 'admin.paymentChannels.interactionModes.redirect' },
     ]
@@ -943,13 +949,17 @@ watch(
     if (epusdtConfig.order_mode === 'cashier') {
       epusdtConfig.token = ''
       epusdtConfig.network = ''
-      return
+    } else {
+      if (String(epusdtConfig.token || '').trim() === '') {
+        epusdtConfig.token = 'usdt'
+      }
+      if (String(epusdtConfig.network || '').trim() === '') {
+        epusdtConfig.network = 'tron'
+      }
     }
-    if (String(epusdtConfig.token || '').trim() === '') {
-      epusdtConfig.token = 'usdt'
-    }
-    if (String(epusdtConfig.network || '').trim() === '') {
-      epusdtConfig.network = 'tron'
+    const allowed = interactionModeOptions.value.map((item) => item.value)
+    if (!allowed.includes(form.interaction_mode)) {
+      form.interaction_mode = pickDefaultInteractionMode()
     }
   }
 )
